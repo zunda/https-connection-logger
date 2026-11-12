@@ -34,20 +34,24 @@ write_out = %w(
 )
 write_out_arg = "%{stderr}" + write_out.map{"#{_1}\t%{#{_1}}\n"}.join()
 
+x, _, s = Open3.capture3(*%w(curl -s https://4.ipaddr.io/ip))
+src_ip = s.success? ? x : nil
+
 cpids = targets.map do |target|
   Process.fork do
     while true
       started_at = Time.now
       _, stderr, _ = Open3.capture3("curl", "-s", "-w", write_out_arg, target)
       completed_at = Time.now
-      puts stderr.split(/\n/).map{|x|
+      data = stderr.split(/\n/).map{|x|
         name, val = x.split(/\t/)
         val ||= ""
         [name, val]
-      }.to_h.merge({
-        "started_at" => started_at.iso8601(3),
-        "completed_at" => completed_at.iso8601(3)
-      }).to_json
+      }.to_h
+      data["src_ip"] = src_ip if src_ip
+      data["started_at"] = started_at.iso8601(3)
+      data["completed_at"] = completed_at.iso8601(3)
+      puts data.to_json
       sleep interval
     end
   end
