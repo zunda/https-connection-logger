@@ -51,7 +51,8 @@ cpids = targets.map do |target|
       data["src_ip"] = src_ip if src_ip
       data["started_at"] = started_at.iso8601(3)
       data["completed_at"] = completed_at.iso8601(3)
-      puts data.to_json
+      $stdout.puts data.to_json
+      $stdout.flush
       sleep interval
     end
   end
