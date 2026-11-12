@@ -1,0 +1,59 @@
+#!/usr/bin/ruby
+#
+# Repeats requests to target URLs and prints metrics from curl command
+#
+# usage: INTERVAL=600 TARGETS=https://www.example.com/,https://www.example.org/ ./repeat-ping
+#
+# requires: curl command
+#
+require "open3"
+require "json"
+require "time"
+
+interval = ENV["INTERVAL"]&.to_i || 600
+targets = ENV["TARGETS"]&.split(/,/)&.map{_1.trim} || %w(
+  https://clean-url.zunda.ninja/
+  https://zunda.ninja/
+)
+
+write_out = %w(
+  errormsg
+  local_ip
+  local_port
+  remote_ip
+  remote_port
+  response_code
+  time_appconnect
+  time_connect
+  time_namelookup
+  time_pretransfer
+  time_redirect
+  time_starttransfer
+  time_total
+  url
+)
+write_out_arg = "%{stderr}" + write_out.map{"#{_1}\t%{#{_1}}\n"}.join()
+
+cpids = targets.map do |target|
+  Process.fork do
+    while true
+      started_at = Time.now
+      _, stderr, _ = Open3.capture3("curl", "-s", "-w", write_out_arg, target)
+      completed_at = Time.now
+      puts stderr.split(/\n/).map{|x|
+        name, val = x.split(/\t/)
+        val ||= ""
+        [name, val]
+      }.to_h.merge({
+        "started_at" => started_at.iso8601(3),
+        "completed_at" => completed_at.iso8601(3)
+      }).to_json
+      sleep interval
+    end
+  end
+end
+
+cpid = Process.wait(0)
+children = cpids.reject{|pid| pid == cpid}
+Process.kill('SIGTERM', *children) unless children.empty?
+Process.waitall
