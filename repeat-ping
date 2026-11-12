@@ -11,7 +11,7 @@ require "json"
 require "time"
 
 interval = ENV["INTERVAL"]&.to_i || 600
-targets = ENV["TARGETS"]&.split(/,/)&.map{_1.trim} || %w(
+targets = ENV["TARGETS"]&.split(/,/)&.map{_1.strip} || %w(
   https://clean-url.zunda.ninja/
   https://zunda.ninja/
 )
