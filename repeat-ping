@@ -17,15 +17,20 @@ USAGE = "Usage: #{File.basename(__FILE__)} [options], *:accepts env var"
 
 interval = nil
 targets_str = nil
+samples = nil
 OptionParser.new do |parser|
   parser.banner = USAGE
 
-  parser.on("-i SECONDS", "--interval", "INTERVAL* between requests [#{DEFAULT_INTERVAL}]") do |x|
+  parser.on("-i seconds", "--interval", "INTERVAL* between requests [#{DEFAULT_INTERVAL}]") do |x|
     interval = Float(x)
   end
 
   parser.on("-t URLs", "--targets", "TARGETS* [#{DEFAULT_TARGETS}]") do |x|
     targets_str = x
+  end
+
+  parser.on("-s number", "--samples", "Stop after taking specified samples") do |x|
+    samples = Integer(x)
   end
 end.parse!
 
@@ -56,7 +61,7 @@ src_ip = s.success? ? x : nil
 
 cpids = targets.map do |target|
   Process.fork do
-    while true
+    loop do
       started_at = Time.now
       _, stderr, _ = Open3.capture3("curl", "-s", "-w", write_out_arg, target)
       completed_at = Time.now
@@ -70,12 +75,18 @@ cpids = targets.map do |target|
       data["completed_at"] = completed_at.iso8601(3)
       $stdout.puts data.to_json
       $stdout.flush
+      if samples
+        samples -= 1
+        break if samples < 1
+      end
       sleep interval
     end
   end
 end
 
-cpid = Process.wait(0)
-children = cpids.reject{|pid| pid == cpid}
-Process.kill('SIGTERM', *children) unless children.empty?
+unless samples
+  cpid = Process.wait(0)
+  children = cpids.reject{|pid| pid == cpid}
+  Process.kill('SIGTERM', *children) unless children.empty?
+end
 Process.waitall
