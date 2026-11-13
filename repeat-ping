@@ -6,15 +6,32 @@
 #
 # requires: curl command
 #
-require "open3"
 require "json"
+require "open3"
+require "optparse"
 require "time"
 
-interval = ENV["INTERVAL"]&.to_i || 600
-targets = ENV["TARGETS"]&.split(/,/)&.map{_1.strip} || %w(
-  https://clean-url.zunda.ninja/
-  https://zunda.ninja/
-)
+DEFAULT_INTERVAL = 600
+DEFAULT_TARGETS = "https://clean-url.zunda.ninja/,https://zunda.ninja/"
+USAGE = "Usage: #{File.basename(__FILE__)} [options], *:accepts env var"
+
+interval = nil
+targets_str = nil
+OptionParser.new do |parser|
+  parser.banner = USAGE
+
+  parser.on("-i SECONDS", "--interval", "INTERVAL* between requests [#{DEFAULT_INTERVAL}]") do |x|
+    interval = Float(x)
+  end
+
+  parser.on("-t URLs", "--targets", "TARGETS* [#{DEFAULT_TARGETS}]") do |x|
+    targets_str = x
+  end
+end.parse!
+
+interval ||= ENV["INTERVAL"]&.to_f || DEFAULT_INTERVAL
+targets_str ||= ENV["TARGETS"] || DEFAULT_TARGETS
+targets = targets_str.split(/,/)&.map{|u| u.strip}
 
 write_out = %w(
   errormsg
