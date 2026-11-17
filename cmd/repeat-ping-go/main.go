@@ -1,8 +1,7 @@
-// based upon https://golang.cafe/blog/how-to-reuse-http-connections-in-go
 package main
 
 import (
-	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -10,12 +9,8 @@ import (
 	"net/http/httptrace"
 )
 
-func get(traceCtx context.Context, url string) {
-	req, err := http.NewRequestWithContext(traceCtx, http.MethodGet, "https://mastodon.zunda.ninja/health", nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-	res, err := http.DefaultClient.Do(req)
+func get(req *http.Request) {
+	res, err := http.DefaultTransport.RoundTrip(req)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -26,12 +21,17 @@ func get(traceCtx context.Context, url string) {
 }
 
 func main() {
-	clientTrace := &httptrace.ClientTrace{
-		GotConn: func(info httptrace.GotConnInfo) { log.Printf("conn was reused: %t", info.Reused) },
-	}
-	traceCtx := httptrace.WithClientTrace(context.Background(), clientTrace)
-
 	url := "https://mastodon.zunda.ninja/health"
-	get(traceCtx, url)
-	get(traceCtx, url)
+	req, _ := http.NewRequest("GET", url, nil)
+	trace := &httptrace.ClientTrace{
+		GotConn: func(connInfo httptrace.GotConnInfo) {
+			fmt.Printf("Got Conn: %+v\n", connInfo)
+		},
+		DNSDone: func(dnsInfo httptrace.DNSDoneInfo) {
+			fmt.Printf("DNS Info: %+v\n", dnsInfo)
+		},
+	}
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
+	get(req)
+	get(req)
 }
