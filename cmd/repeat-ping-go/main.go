@@ -10,12 +10,7 @@ import (
 	"net/http/httptrace"
 )
 
-func main() {
-	clientTrace := &httptrace.ClientTrace{
-		GotConn: func(info httptrace.GotConnInfo) { log.Printf("conn was reused: %t", info.Reused) },
-	}
-	traceCtx := httptrace.WithClientTrace(context.Background(), clientTrace)
-
+func get(traceCtx context.Context, url string) {
 	req, err := http.NewRequestWithContext(traceCtx, http.MethodGet, "https://mastodon.zunda.ninja/health", nil)
 	if err != nil {
 		log.Fatal(err)
@@ -28,17 +23,15 @@ func main() {
 		log.Fatal(err)
 	}
 	res.Body.Close()
+}
 
-	req, err = http.NewRequestWithContext(traceCtx, http.MethodGet, "https://mastodon.zunda.ninja/health", nil)
-	if err != nil {
-		log.Fatal(err)
+func main() {
+	clientTrace := &httptrace.ClientTrace{
+		GotConn: func(info httptrace.GotConnInfo) { log.Printf("conn was reused: %t", info.Reused) },
 	}
-	res, err = http.DefaultClient.Do(req)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if _, err := io.Copy(ioutil.Discard, res.Body); err != nil {
-		log.Fatal(err)
-	}
-	res.Body.Close()
+	traceCtx := httptrace.WithClientTrace(context.Background(), clientTrace)
+
+	url := "https://mastodon.zunda.ninja/health"
+	get(traceCtx, url)
+	get(traceCtx, url)
 }
