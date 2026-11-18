@@ -1,57 +1,43 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"net/http/httptrace"
+	"os"
 	"time"
 )
 
 type transport struct {
 	current *http.Request
 
-	dnsStartAt time.Time
-	dnsDoneAt time.Time
-	startedAt time.Time
-	gotConnAt time.Time
-	gotFirstResponseByteAt time.Time
-	completedAt time.Time
+	StartedAt   time.Time
+	CompletedAt time.Time
+	TimeTotal   float64
 
-	url string
-	errmsg string
-	localIp string
-	localPort string
-	remoteIp string
-	remotePort string
-	responseCode int
-	srcIp string
-	requestCount int
-}
-
-func (t *transport) DNSStart(_ httptrace.DNSStartInfo) {
-	t.dnsStartAt = time.Now()
-}
-
-func (t *transport) DNSDone(_ httptrace.DNSDoneInfo) {
-	t.dnsDoneAt = time.Now()
+	Url          string
+	Errmsg       string
+	LocalIp      string
+	LocalPort    string
+	RemoteIp     string
+	RemotePort   string
+	ResponseCode int
+	SrcIp        string
+	RequestCount int
 }
 
 func (t *transport) GotConn(info httptrace.GotConnInfo) {
-	t.gotConnAt = time.Now()
-	t.localIp, t.localPort, _ = net.SplitHostPort(info.Conn.LocalAddr().String())
-	t.remoteIp, t.remotePort, _ = net.SplitHostPort(info.Conn.RemoteAddr().String())
+	t.LocalIp, t.LocalPort, _ = net.SplitHostPort(info.Conn.LocalAddr().String())
+	t.RemoteIp, t.RemotePort, _ = net.SplitHostPort(info.Conn.RemoteAddr().String())
 	if info.Reused {
-		t.requestCount += 1
+		t.RequestCount += 1
 	} else {
-		t.requestCount = 1
+		t.RequestCount = 1
 	}
-}
-
-func (t *transport) GotFirstResponseByte() {
-	t.gotFirstResponseByteAt = time.Now()
 }
 
 func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -59,24 +45,34 @@ func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return http.DefaultTransport.RoundTrip(req)
 }
 
+func (t *transport) log() {
+	e := json.NewEncoder(os.Stdout)
+	t.TimeTotal = t.CompletedAt.Sub(t.StartedAt).Seconds()
+	err := e.Encode(t)
+	if err != nil {
+		fmt.Println(os.Stderr, err.Error())
+	}
+	os.Stdout.Sync()
+}
+
 func get(req *http.Request, transport *transport) {
-	transport.url = req.URL.String()
-	transport.startedAt = time.Now()
+	transport.Url = req.URL.String()
+	transport.StartedAt = time.Now()
 	client := &http.Client{Transport: transport}
 	res, err := client.Do(req)
-	transport.completedAt = time.Now()
+	transport.CompletedAt = time.Now()
 	if err != nil {
-		transport.errmsg = err.Error()
+		transport.Errmsg = err.Error()
 		goto Log
 	}
 	defer res.Body.Close()
-	transport.responseCode = res.StatusCode
+	transport.ResponseCode = res.StatusCode
 	if _, err := io.Copy(ioutil.Discard, res.Body); err != nil {
-		transport.errmsg = err.Error()
+		transport.Errmsg = err.Error()
 		goto Log
 	}
 Log:
-	log.Printf("%+v", transport)
+	transport.log()
 }
 
 func srcIp() string {
@@ -94,15 +90,12 @@ func srcIp() string {
 
 func main() {
 	t := &transport{}
-	t.srcIp = srcIp()
+	t.SrcIp = srcIp()
 
 	url := "https://mastodon.zunda.ninja/health"
 	req, _ := http.NewRequest("GET", url, nil)
 	trace := &httptrace.ClientTrace{
 		GotConn: t.GotConn,
-		DNSStart: t.DNSStart,
-		DNSDone: t.DNSDone,
-		GotFirstResponseByte: t.GotFirstResponseByte,
 	}
 	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
 	get(req, t)
