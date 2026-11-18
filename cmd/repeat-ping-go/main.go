@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -9,8 +8,22 @@ import (
 	"net/http/httptrace"
 )
 
-func get(req *http.Request) {
-	res, err := http.DefaultTransport.RoundTrip(req)
+type transport struct {
+	current *http.Request
+}
+
+func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
+	t.current = req
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+func (t *transport) GotConn(info httptrace.GotConnInfo) {
+	log.Printf("%+v: %+v", t.current, info)
+}
+
+func get(req *http.Request, transport *transport) {
+	client := &http.Client{Transport: transport}
+	res, err := client.Do(req)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -21,17 +34,14 @@ func get(req *http.Request) {
 }
 
 func main() {
+	t := &transport{}
+
 	url := "https://mastodon.zunda.ninja/health"
 	req, _ := http.NewRequest("GET", url, nil)
 	trace := &httptrace.ClientTrace{
-		GotConn: func(connInfo httptrace.GotConnInfo) {
-			fmt.Printf("Got Conn: %+v\n", connInfo)
-		},
-		DNSDone: func(dnsInfo httptrace.DNSDoneInfo) {
-			fmt.Printf("DNS Info: %+v\n", dnsInfo)
-		},
+		GotConn: t.GotConn,
 	}
 	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
-	get(req)
-	get(req)
+	get(req, t)
+	get(req, t)
 }
