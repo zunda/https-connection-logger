@@ -15,10 +15,10 @@ type transport struct {
 
 	dnsStartAt time.Time
 	dnsDoneAt time.Time
-	startRequestAt time.Time
+	startedAt time.Time
 	gotConnAt time.Time
 	gotFirstResponseByteAt time.Time
-	receivedResponseAt time.Time
+	completedAt time.Time
 
 	url string
 	errmsg string
@@ -27,6 +27,7 @@ type transport struct {
 	remoteIp string
 	remotePort string
 	responseCode int
+	srcIp string
 }
 
 func (t *transport) DNSStart(_ httptrace.DNSStartInfo) {
@@ -54,26 +55,40 @@ func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func get(req *http.Request, transport *transport) {
 	transport.url = req.URL.String()
+	transport.startedAt = time.Now()
 	client := &http.Client{Transport: transport}
-	transport.startRequestAt = time.Now()
 	res, err := client.Do(req)
-	transport.receivedResponseAt = time.Now()
+	transport.completedAt = time.Now()
 	if err != nil {
 		transport.errmsg = err.Error()
 		goto Log
 	}
+	defer res.Body.Close()
 	transport.responseCode = res.StatusCode
 	if _, err := io.Copy(ioutil.Discard, res.Body); err != nil {
 		transport.errmsg = err.Error()
 		goto Log
 	}
-	res.Body.Close()
 Log:
 	log.Printf("%+v", transport)
 }
 
+func srcIp() string {
+	res, err := http.Get("https://4.ipaddr.io/ip")
+	if err != nil {
+		return err.Error()
+	}
+	defer res.Body.Close()
+	srcIp, err := io.ReadAll(res.Body)
+	if err != nil {
+		return err.Error()
+	}
+	return string(srcIp)
+}
+
 func main() {
 	t := &transport{}
+	t.srcIp = srcIp()
 
 	url := "https://mastodon.zunda.ninja/health"
 	req, _ := http.NewRequest("GET", url, nil)
