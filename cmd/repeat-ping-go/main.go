@@ -28,6 +28,7 @@ type transport struct {
 	remotePort string
 	responseCode int
 	srcIp string
+	requestCount int
 }
 
 func (t *transport) DNSStart(_ httptrace.DNSStartInfo) {
@@ -42,6 +43,11 @@ func (t *transport) GotConn(info httptrace.GotConnInfo) {
 	t.gotConnAt = time.Now()
 	t.localIp, t.localPort, _ = net.SplitHostPort(info.Conn.LocalAddr().String())
 	t.remoteIp, t.remotePort, _ = net.SplitHostPort(info.Conn.RemoteAddr().String())
+	if info.Reused {
+		t.requestCount += 1
+	} else {
+		t.requestCount = 1
+	}
 }
 
 func (t *transport) GotFirstResponseByte() {
