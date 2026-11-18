@@ -4,6 +4,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httptrace"
 	"time"
@@ -19,8 +20,13 @@ type transport struct {
 	gotFirstResponseByteAt time.Time
 	receivedResponseAt time.Time
 
-	localAddr string
-	remoteAddr string
+	url string
+	errmsg string
+	localIp string
+	localPort string
+	remoteIp string
+	remotePort string
+	responseCode int
 }
 
 func (t *transport) DNSStart(_ httptrace.DNSStartInfo) {
@@ -33,8 +39,8 @@ func (t *transport) DNSDone(_ httptrace.DNSDoneInfo) {
 
 func (t *transport) GotConn(info httptrace.GotConnInfo) {
 	t.gotConnAt = time.Now()
-	t.localAddr = info.Conn.LocalAddr().String()
-	t.remoteAddr = info.Conn.RemoteAddr().String()
+	t.localIp, t.localPort, _ = net.SplitHostPort(info.Conn.LocalAddr().String())
+	t.remoteIp, t.remotePort, _ = net.SplitHostPort(info.Conn.RemoteAddr().String())
 }
 
 func (t *transport) GotFirstResponseByte() {
@@ -47,17 +53,22 @@ func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func get(req *http.Request, transport *transport) {
+	transport.url = req.URL.String()
 	client := &http.Client{Transport: transport}
 	transport.startRequestAt = time.Now()
 	res, err := client.Do(req)
 	transport.receivedResponseAt = time.Now()
 	if err != nil {
-		log.Fatal(err)
+		transport.errmsg = err.Error()
+		goto Log
 	}
+	transport.responseCode = res.StatusCode
 	if _, err := io.Copy(ioutil.Discard, res.Body); err != nil {
-		log.Fatal(err)
+		transport.errmsg = err.Error()
+		goto Log
 	}
 	res.Body.Close()
+Log:
 	log.Printf("%+v", transport)
 }
 
