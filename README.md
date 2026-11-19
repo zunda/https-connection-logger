@@ -6,6 +6,6 @@ A Heroku app to log connections to remote servers
 $ heroku create <app-name>
 $ git push heroku main
 $ heroku addons:add <logging-addon>
-$ heroku config:set TARGETS=https://www.example.com/,https://www.example.org/
+$ heroku config:set TARGET=https://www.example.com/
 $ heroku ps:scale worker=1
 ```
