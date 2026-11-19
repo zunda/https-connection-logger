@@ -29,24 +29,24 @@ type transport struct {
 	CompletedAt time.Time
 	TimeTotal   float64
 
-	Url          string
-	Errmsg       string
-	LocalIp      string
-	LocalPort    string
-	RemoteIp     string
-	RemotePort   string
-	ResponseCode int
-	SrcIp        string
-	RequestCount int
+	Url            string
+	Errmsg         string
+	LocalIp        string
+	LocalPort      string
+	RemoteIp       string
+	RemotePort     string
+	ResponseCode   int
+	SrcIp          string
+	ReqOnConnCount int
 }
 
 func (t *transport) GotConn(info httptrace.GotConnInfo) {
 	t.LocalIp, t.LocalPort, _ = net.SplitHostPort(info.Conn.LocalAddr().String())
 	t.RemoteIp, t.RemotePort, _ = net.SplitHostPort(info.Conn.RemoteAddr().String())
 	if info.Reused {
-		t.RequestCount += 1
+		t.ReqOnConnCount += 1
 	} else {
-		t.RequestCount = 1
+		t.ReqOnConnCount = 1
 	}
 }
 
