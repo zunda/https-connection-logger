@@ -1,3 +1,12 @@
+/*
+Usage:
+
+  INTERVAL=60 TARGET=https://zunda.ninja repeat-ping-go
+
+repeatedly sends requests to the TARGET with the INTERVAL
+and prints metrics
+*/
+
 package main
 
 import (
@@ -9,6 +18,7 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -96,14 +106,28 @@ func srcIp() string {
 }
 
 func main() {
+	var interval float64
+	var url string
+
+	i := os.Getenv("INTERVAL")
+	if i != "" {
+		interval, _ = strconv.ParseFloat(i, 64)
+	}
+	if interval == 0 {
+		interval = 600
+	}
+
+	url = os.Getenv("TARGET")
+	if url == "" {
+		url = "https://zunda.ninja/"
+	}
+
 	t := &transport{}
 	t.SrcIp = srcIp()
-
-	url := "https://mastodon.zunda.ninja/health"
 	req, _ := http.NewRequest("GET", url, nil)
 	trace := &httptrace.ClientTrace{
 		GotConn: t.GotConn,
 	}
 	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
-	repeatGet(5 * time.Second, req, t)
+	repeatGet(time.Duration(interval)*time.Second, req, t)
 }
