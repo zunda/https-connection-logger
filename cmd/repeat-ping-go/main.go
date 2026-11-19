@@ -75,6 +75,13 @@ Log:
 	transport.log()
 }
 
+func repeatGet(interval time.Duration, req *http.Request, transport *transport) {
+	for {
+		get(req, transport)
+		time.Sleep(interval)
+	}
+}
+
 func srcIp() string {
 	res, err := http.Get("https://4.ipaddr.io/ip")
 	if err != nil {
@@ -98,7 +105,5 @@ func main() {
 		GotConn: t.GotConn,
 	}
 	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
-	get(req, t)
-	time.Sleep(5 * time.Second)
-	get(req, t)
+	repeatGet(5 * time.Second, req, t)
 }
