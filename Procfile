@@ -1,1 +1,1 @@
-worker: bundle exec ruby repeat-ping
+worker: bin/repeat-ping-go
