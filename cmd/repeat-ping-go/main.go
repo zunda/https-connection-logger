@@ -11,6 +11,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -20,6 +21,11 @@ import (
 	"os"
 	"strconv"
 	"time"
+)
+
+const (
+	defaultInterval = 600
+	defaultUrl      = "https://zunda.ninja"
 )
 
 type transport struct {
@@ -105,7 +111,17 @@ func srcIp() string {
 	return string(srcIp)
 }
 
+var optInterval float64
+var optUrl string
+
+func init() {
+	flag.Float64Var(&optInterval, "i", defaultInterval, "interval between requests (sec)")
+	flag.StringVar(&optUrl, "t", defaultUrl, "target URL")
+}
+
 func main() {
+	flag.Parse()
+
 	var interval float64
 	var url string
 
@@ -114,12 +130,12 @@ func main() {
 		interval, _ = strconv.ParseFloat(i, 64)
 	}
 	if interval == 0 {
-		interval = 600
+		interval = optInterval
 	}
 
 	url = os.Getenv("TARGET")
 	if url == "" {
-		url = "https://zunda.ninja/"
+		url = optUrl
 	}
 
 	t := &transport{}
