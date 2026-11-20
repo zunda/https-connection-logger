@@ -26,6 +26,7 @@ import (
 const (
 	defaultInterval = 600
 	defaultUrl      = "https://zunda.ninja"
+	defaultSamples  = 0
 )
 
 type transport struct {
@@ -91,9 +92,15 @@ Log:
 	transport.log()
 }
 
-func repeatGet(interval time.Duration, req *http.Request, transport *transport) {
+func repeatGet(interval time.Duration, req *http.Request, transport *transport, samples int) {
 	for {
 		get(req, transport)
+		if samples > 0 {
+			samples--
+			if samples == 0 {
+				break
+			}
+		}
 		time.Sleep(interval)
 	}
 }
@@ -113,10 +120,12 @@ func srcIp() string {
 
 var optInterval float64
 var optUrl string
+var samples int
 
 func init() {
 	flag.Float64Var(&optInterval, "i", defaultInterval, "interval between requests (sec)")
 	flag.StringVar(&optUrl, "t", defaultUrl, "target URL")
+	flag.IntVar(&samples, "s", defaultSamples, "number of samples (0 for inifinte)")
 }
 
 func main() {
@@ -145,5 +154,5 @@ func main() {
 		GotConn: t.GotConn,
 	}
 	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
-	repeatGet(time.Duration(interval)*time.Second, req, t)
+	repeatGet(time.Duration(interval)*time.Second, req, t, samples)
 }
