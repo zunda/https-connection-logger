@@ -10,6 +10,7 @@ and prints metrics
 package main
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -20,6 +21,7 @@ import (
 	"net/http/httptrace"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -45,16 +47,64 @@ type transport struct {
 	ResponseCode   int
 	SrcIp          string
 	ReqOnConnCount int
+
+	afterPrevReq []string
+	AfterPrevReq string
+}
+
+func (t *transport) GetConn(_ string) {
+	t.afterPrevReq = append(t.afterPrevReq, "GetConn")
 }
 
 func (t *transport) GotConn(info httptrace.GotConnInfo) {
 	t.LocalIp, t.LocalPort, _ = net.SplitHostPort(info.Conn.LocalAddr().String())
 	t.RemoteIp, t.RemotePort, _ = net.SplitHostPort(info.Conn.RemoteAddr().String())
+	t.afterPrevReq = append(t.afterPrevReq, "GotConn")
 	if info.Reused {
 		t.ReqOnConnCount += 1
 	} else {
 		t.ReqOnConnCount = 1
 	}
+}
+
+func (t *transport) PutIdleConn(_ error) {
+	t.afterPrevReq = append(t.afterPrevReq, "PutIdleConn")
+}
+
+func (t *transport) GotFirstResponseByte() {
+	t.afterPrevReq = append(t.afterPrevReq, "GotFirstResponseByte")
+}
+
+func (t *transport) DNSStart(_ httptrace.DNSStartInfo) {
+	t.afterPrevReq = append(t.afterPrevReq, "DNSStart")
+}
+
+func (t *transport) DNSDone(_ httptrace.DNSDoneInfo) {
+	t.afterPrevReq = append(t.afterPrevReq, "DNSDone")
+}
+
+func (t *transport) ConnectStart(_, _ string) {
+	t.afterPrevReq = append(t.afterPrevReq, "ConnectStart")
+}
+
+func (t *transport) ConnectDone(_, _ string, _ error) {
+	t.afterPrevReq = append(t.afterPrevReq, "ConnectDone")
+}
+
+func (t *transport) TLSHandshakeStart() {
+	t.afterPrevReq = append(t.afterPrevReq, "TLSHandshakeStart")
+}
+
+func (t *transport) TLSHandshakeDone(_ tls.ConnectionState, _ error) {
+	t.afterPrevReq = append(t.afterPrevReq, "TLSHandshakeDone")
+}
+
+func (t *transport) WroteHeaders() {
+	t.afterPrevReq = append(t.afterPrevReq, "WroteHeaders")
+}
+
+func (t *transport) WroteRequest(_ httptrace.WroteRequestInfo) {
+	t.afterPrevReq = append(t.afterPrevReq, "WroteRequest")
 }
 
 func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -65,10 +115,12 @@ func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 func (t *transport) log() {
 	e := json.NewEncoder(os.Stdout)
 	t.TimeTotal = t.CompletedAt.Sub(t.StartedAt).Seconds()
+	t.AfterPrevReq = strings.Join(t.afterPrevReq, ",")
 	err := e.Encode(t)
 	if err != nil {
 		fmt.Println(os.Stderr, err.Error())
 	}
+	t.afterPrevReq = nil
 	os.Stdout.Sync()
 }
 
@@ -151,7 +203,18 @@ func main() {
 	t.SrcIp = srcIp()
 	req, _ := http.NewRequest("GET", url, nil)
 	trace := &httptrace.ClientTrace{
-		GotConn: t.GotConn,
+		GetConn:              t.GetConn,
+		GotConn:              t.GotConn,
+		PutIdleConn:          t.PutIdleConn,
+		GotFirstResponseByte: t.GotFirstResponseByte,
+		DNSStart:             t.DNSStart,
+		DNSDone:              t.DNSDone,
+		ConnectStart:         t.ConnectStart,
+		ConnectDone:          t.ConnectDone,
+		TLSHandshakeStart:    t.TLSHandshakeStart,
+		TLSHandshakeDone:     t.TLSHandshakeDone,
+		WroteHeaders:         t.WroteHeaders,
+		WroteRequest:         t.WroteRequest,
 	}
 	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
 	repeatGet(time.Duration(interval)*time.Second, req, t, samples)
