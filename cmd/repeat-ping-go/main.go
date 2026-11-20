@@ -29,6 +29,7 @@ const (
 	defaultInterval = 600
 	defaultUrl      = "https://zunda.ninja"
 	defaultSamples  = 0
+	defaultTimeout  = 60
 )
 
 type transport struct {
@@ -124,10 +125,13 @@ func (t *transport) log() {
 	os.Stdout.Sync()
 }
 
-func get(req *http.Request, transport *transport) {
+func get(req *http.Request, transport *transport, timeout time.Duration) {
 	transport.Url = req.URL.String()
 	transport.StartedAt = time.Now()
-	client := &http.Client{Transport: transport}
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   timeout,
+	}
 	res, err := client.Do(req)
 	transport.CompletedAt = time.Now()
 	if err != nil {
@@ -144,9 +148,15 @@ Log:
 	transport.log()
 }
 
-func repeatGet(interval time.Duration, req *http.Request, transport *transport, samples int) {
+func repeatGet(
+	interval time.Duration,
+	req *http.Request,
+	transport *transport,
+	samples int,
+	timeout time.Duration,
+) {
 	for {
-		get(req, transport)
+		get(req, transport, timeout)
 		if samples > 0 {
 			samples--
 			if samples == 0 {
@@ -172,12 +182,29 @@ func srcIp() string {
 
 var optInterval float64
 var optUrl string
+var optTimeout float64
 var samples int
 
 func init() {
-	flag.Float64Var(&optInterval, "i", defaultInterval, "interval between requests (sec)")
+	flag.Float64Var(
+		&optInterval,
+		"i",
+		defaultInterval,
+		"interval between requests (sec)",
+	)
 	flag.StringVar(&optUrl, "t", defaultUrl, "target URL")
-	flag.IntVar(&samples, "s", defaultSamples, "number of samples (0 for inifinte)")
+	flag.Float64Var(
+		&optTimeout,
+		"l",
+		defaultTimeout,
+		"time limit to receive HTTP response (sec)",
+	)
+	flag.IntVar(
+		&samples,
+		"s",
+		defaultSamples,
+		"number of samples (0 for inifinte)",
+	)
 }
 
 func main() {
@@ -185,6 +212,7 @@ func main() {
 
 	var interval float64
 	var url string
+	var timeout float64
 
 	i := os.Getenv("INTERVAL")
 	if i != "" {
@@ -197,6 +225,14 @@ func main() {
 	url = os.Getenv("TARGET")
 	if url == "" {
 		url = optUrl
+	}
+
+	l := os.Getenv("TIMEOUT")
+	if l != "" {
+		timeout, _ = strconv.ParseFloat(l, 64)
+	}
+	if timeout == 0 {
+		timeout = optTimeout
 	}
 
 	t := &transport{}
@@ -217,5 +253,10 @@ func main() {
 		WroteRequest:         t.WroteRequest,
 	}
 	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
-	repeatGet(time.Duration(interval)*time.Second, req, t, samples)
+	repeatGet(
+		time.Duration(interval)*time.Second,
+		req,
+		t, samples,
+		time.Duration(timeout)*time.Second,
+	)
 }
